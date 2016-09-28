@@ -1,0 +1,27 @@
+
+
+todos:
+  done:
+    how to live reload tree
+
+  pending:
+    fix text input hover
+    after search, expand all targed nodes
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

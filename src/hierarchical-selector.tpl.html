@@ -15,6 +15,7 @@
   </div>
   <div class="tree-view-outer" ng-show="showTree">
     <div class="tree-view" ng-show="showTree">
+      <div ng-show="isSearchEnabled"><input type="text" class="form-control" ng-click="defaultClickHandler($event)" ng-model="search" ng-change="onSearchChange()"/></div>
       <ul>
         <tree-item
           class="top-level"

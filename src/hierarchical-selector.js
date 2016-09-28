@@ -21,6 +21,7 @@ angular.module('hierarchical-selector', [
         canSelectItem: '&',
         loadChildItems: '&',
         itemHasChildren: '&',
+        indexDb: '=?',
         selection: '=',
         tagName: '&',
         placeholder: '@'
@@ -72,12 +73,127 @@ angular.module('hierarchical-selector', [
         // we need somewhere to hold the async loaded children to reference them in navigation etc.
         $scope.asyncChildCache = {};
 
+        if ($scope.indexDb !== null){
+          $scope.isSearchEnabled = true;
+        }
+
+        // start: handle search input, should only be enabled in non-async mode
+        $scope.defaultClickHandler = function($evt){
+          $evt.stopPropagation();
+        };
+
+        var _searchTimer = null;
+        $scope.onSearchChange = function(){
+          clearTimeout(_searchTimer);
+          _searchTimer = setTimeout(function(){
+            var search = $scope.search.trim();
+
+            if (!search){
+              $scope.$apply(function(){
+                $scope.data = _syncData;
+              });
+            }else{
+              //todo: disable active
+              $scope.$apply(function(){
+                doSearch(search);
+              });
+            }
+          }, 500);
+        };
+
+        var _syncData = $scope.syncData;
+
+        var indexer = {
+          getNewTree: function(keyword){
+            var _this = this;
+            var _db = $scope.indexDb;
+
+            function makeExpand(node){
+              if (!node._hsmeta) {
+                node._hsmeta = {};
+              }
+              node._hsmeta.isExpanded = true;
+              return node;
+            }
+
+            if (!_db){
+              throw new Error('db is required for search feature');
+            }
+
+            var rows = _db.query(function(node){
+              return node.name && node.name.indexOf(keyword) !== -1;
+            });
+
+            var nTreeData = [];
+
+            if (rows.length === 0){
+              return nTreeData;
+            }else{
+              // console.debug('result is: ', JSON.stringify(rows));
+
+              rows.forEach(function(node){
+                var pnode = _db.getParentNode(node);// return null if its root node
+
+                if (pnode === null){
+                  nTreeData.push(node);
+                }else{
+                  var counter = 0;
+
+                  while(pnode !== null){//max loop 
+                    if (counter >= 100){
+                      throw new Error('max depth reached');
+                    }
+
+                    if (!pnode.children){
+                      pnode.children = [];
+                    }
+
+                    if (_this.indexOf(pnode.children, function(e){ return e.id === node.id; }) === -1){
+                      pnode.children.push(makeExpand(node));
+                    }
+                    node = pnode;
+                    pnode = _db.getParentNode(node);
+
+                    counter ++;
+                  }
+
+                  if (_this.indexOf(nTreeData, function(e){return e.id === node.id;}) === -1){
+                    nTreeData.push(makeExpand(node));
+                  }
+                }
+
+              });
+            }
+
+            // console.debug('result is: ', JSON.stringify(nTreeData));
+
+            return nTreeData;
+          },
+
+          indexOf: function(col, predict){
+            for (var i = 0; i < col.length; i++){
+              if (predict(col[i])) return i
+            }
+            return -1;
+          }
+
+        };
+
+        function doSearch(keyword){
+          $scope.data = indexer.getNewTree(keyword);
+        }
+
+        // ends:  handle search inputs
+
+
         function docClickHide(e) {
           closePopup();
           $scope.$apply();
         }
 
         function closePopup() {
+          if (_searchTimer) clearTimeout(_searchTimer);
+
           $scope.showTree = false;
           if (activeItem) {
             var itemMeta = selectorUtils.getMetaData(activeItem);
@@ -282,6 +398,9 @@ angular.module('hierarchical-selector', [
           $event.stopPropagation();
           if (!$scope.showTree) {
             $scope.showTree = true;
+
+            $scope.search = '';
+            $scope.data = _syncData;//reset sync data
 
             $document.on('click', docClickHide);
             $document.on('keydown', keyboardNav);
